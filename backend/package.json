@@ -1,0 +1,19 @@
+{
+  "name": "ai-ambulance-backend",
+  "version": "0.1.0",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot index.ts",
+    "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "socket.io": "^4.8.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "@google/generative-ai": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20"
+  }
+}
