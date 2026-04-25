@@ -49,8 +49,7 @@ async function createMockIncident() {
     // BUG-003 fix: include patient_summary and triage_reasoning so dashboard cards render correctly
     patient_summary: "54-year-old male, unresponsive, suspected cardiac arrest. Requires ALS with defibrillator.",
     triage_reasoning: "CRITICAL classification: loss of consciousness with suspected cardiac etiology.",
-    suspected_conditions: ["cardiac arrest", "MI"],
-    hospital_requirements: ["ICU", "cardiac"]
+    suspected_conditions: ["cardiac arrest", "MI"]
   }).select().single();
 
   if (error) {
