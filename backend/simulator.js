@@ -118,7 +118,7 @@ async function main() {
   console.log(`📡 Connecting to Socket.IO at: ${SOCKET_URL}`);
 
   // 1. Fetch the most recent active incident with a route
-  const { data: incident, error } = await supabase
+  let { data: incident, error } = await supabase
     .from('incidents')
     .select('id, assigned_ambulance_id, route_geojson, status')
     .eq('status', 'active')
@@ -152,13 +152,14 @@ async function main() {
       }).select().single();
       if (incErr || !newInc) { console.error('❌ Failed to create mock incident:', incErr?.message); process.exit(1); }
       console.log('✅ Mock incident created:', newInc.id);
-      // Reassign to the newly created incident for simulation
-      Object.assign(incident || {}, newInc);
+      
+      incident = newInc;
+      
       // Re-fetch after creation
       const { data: freshInc } = await supabase.from('incidents')
         .select('id, assigned_ambulance_id, route_geojson, status')
         .eq('id', newInc.id).single();
-      if (freshInc) Object.assign(incident || {}, freshInc);
+      if (freshInc) incident = freshInc;
     } else {
       console.error('❌ No active incident with route found:', error?.message || 'No data');
       console.log('💡 Tip: Run with --mock flag or create an incident via POST /api/emergency/intake');

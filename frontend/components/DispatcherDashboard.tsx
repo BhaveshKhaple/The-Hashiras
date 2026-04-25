@@ -280,7 +280,10 @@ function DispatcherDashboardInner() {
           {incidents.length === 0 ? (
             <div className="text-center py-10 text-gray-600 italic">No active emergencies</div>
           ) : (
-            incidents.map(incident => (
+            incidents.map(incident => {
+              const assignedAmb = ambulances.find(a => a.id === incident.assigned_ambulance_id);
+              const assignedHosp = hospitals.find(h => h.id === incident.assigned_hospital_id);
+              return (
               <div key={incident.id} className="group glass p-4 rounded-xl cursor-pointer hover:border-white/30 transition-all">
                 <div className="flex justify-between items-start mb-2">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
@@ -298,20 +301,42 @@ function DispatcherDashboardInner() {
                 <p className="text-[11px] text-gray-500 mt-2 line-clamp-2 italic">
                   &quot;{incident.patient_summary}&quot;
                 </p>
-                <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Navigation className="w-3 h-3 text-red-500" />
-                    {/* BUG-010 fix: dynamic ambulance name lookup instead of hardcoded AMB-001 */}
-                    <span className="text-[10px] font-mono text-gray-400">
-                      {ambulances.find(a => a.id === incident.assigned_ambulance_id)?.name || 'AMB-???'}
-                    </span>
+
+                {/* Allocation Details */}
+                <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+                  {/* Ambulance assignment */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Navigation className="w-3 h-3 text-red-500" />
+                      <span className="text-[10px] font-mono text-gray-400">
+                        {assignedAmb?.name || 'AMB-???'}
+                      </span>
+                      {assignedAmb?.type && (
+                        <span className={`text-[8px] font-bold px-1 py-0.5 rounded ${
+                          assignedAmb.type === 'ALS' ? 'bg-red-900/40 text-red-400' : 'bg-green-900/40 text-green-400'
+                        }`}>
+                          {assignedAmb.type}
+                        </span>
+                      )}
+                    </div>
+                    {assignedAmb?.driver_name && (
+                      <span className="text-[10px] text-gray-500">{assignedAmb.driver_name}</span>
+                    )}
                   </div>
-                  <button className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors">
-                    Details
-                  </button>
+
+                  {/* Hospital assignment */}
+                  {assignedHosp && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px]">🏥</span>
+                      <span className="text-[10px] text-gray-400 truncate">{assignedHosp.name}</span>
+                      <span className="text-[10px] text-gray-600">({assignedHosp.available_beds} beds)</span>
+                    </div>
+                  )}
                 </div>
               </div>
-            ))
+              );
+            })
+
           )}
         </div>
 
