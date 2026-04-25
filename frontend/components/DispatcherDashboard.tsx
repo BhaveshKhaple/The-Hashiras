@@ -99,6 +99,8 @@ function DispatcherDashboardInner() {
     });
 
     return () => {
+      socket.off('ambulance:location');
+      socket.off('dispatch:ambulance');
       socket.off('corridor:granted');
       socket.off('incident:updated');
       socket.disconnect();

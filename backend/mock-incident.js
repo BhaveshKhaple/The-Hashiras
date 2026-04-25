@@ -56,7 +56,11 @@ async function createMockIncident() {
   if (error) {
     console.error('Error creating mock incident:', error);
   } else {
+    // Mark the ambulance as dispatched so the dashboard shows the correct status
+    await supabase.from('ambulances').update({ status: 'dispatched' }).eq('id', amb.id);
     console.log('✅ Mock incident created:', incident.id);
+    console.log(`🚑 Ambulance ${amb.id} marked as dispatched`);
+    console.log('💡 Now run: node simulator.js');
     return incident;
   }
 }
