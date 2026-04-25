@@ -7,7 +7,7 @@ const withPWA = require("next-pwa")({
 });
 
 const nextConfig = {
-  turbopack: {},
+  // DISP-004 fix: removed empty turbopack:{} — was causing potential route group resolution issues
   async headers() {
     return [{
       source: "/(.*)",
@@ -17,3 +17,4 @@ const nextConfig = {
 };
 
 module.exports = withPWA(nextConfig);
+

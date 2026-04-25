@@ -187,8 +187,8 @@ Export encountered an error on /page: /
 > [!IMPORTANT]
 > **To run the system end-to-end:**
 > 1. Set up env vars from ENV-001/002/003 above
-> 2. `cd backend && bun install && bun run index.ts`
+> 2. `cd backend && npm install && npm run start`
 > 3. `cd frontend && npm run dev` (use dev server, not build)
 > 4. Navigate to `http://localhost:3000` (SOS app) and `http://localhost:3000/dispatcher` (dashboard)
-> 5. To test simulator without real incidents: `cd backend && bun run simulator.js --mock`
+> 5. To test simulator without real incidents: `cd backend && npm run simulator -- --mock`
 
