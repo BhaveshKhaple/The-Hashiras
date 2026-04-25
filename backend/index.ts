@@ -50,9 +50,14 @@ io.on('connection', (socket) => {
   
   // Listen for ambulance GPS updates from simulator or driver app
   socket.on('ambulance:location', (data) => {
+    // BUG-T003 fix: guard against missing/non-numeric lat/lng before broadcasting
+    if (typeof data?.lat !== 'number' || typeof data?.lng !== 'number') {
+      console.warn(`⚠️  ambulance:location skipped — invalid coords from ${socket.id}:`, data)
+      return
+    }
     // Broadcast to all other clients (dispatchers, hospitals, traffic police)
     socket.broadcast.emit('ambulance:location', data)
-    console.log(`📍 Ambulance ${data.ambulance_id} → [${data.lng?.toFixed(5)}, ${data.lat?.toFixed(5)}] (${data.progress}%)`)
+    console.log(`📍 Ambulance ${data.ambulance_id} → [${data.lng.toFixed(5)}, ${data.lat.toFixed(5)}] (${data.progress}%)`)
   })
 
   // Allow clients to join incident-specific rooms
@@ -198,8 +203,19 @@ app.post('/api/emergency/intake', async (c) => {
         ];
         routeData = await calculateRoute(coords);
         
-        if (routeData.features && routeData.features.length > 0) {
-          const durationSeconds = routeData.features[0].properties.summary.duration;
+        // BUG-013 fix: ORS returns duration in multiple possible locations depending on API version/format
+        let durationSeconds = 0;
+        if (routeData?.features?.[0]?.properties?.segments?.[0]?.duration) {
+          // GeoJSON FeatureCollection with segments array (ORS v2 standard)
+          durationSeconds = routeData.features[0].properties.segments[0].duration;
+        } else if (routeData?.features?.[0]?.properties?.summary?.duration) {
+          // GeoJSON FeatureCollection with summary object (some ORS versions)
+          durationSeconds = routeData.features[0].properties.summary.duration;
+        } else if (routeData?.routes?.[0]?.summary?.duration) {
+          // JSON format response
+          durationSeconds = routeData.routes[0].summary.duration;
+        }
+        if (durationSeconds > 0) {
           etaMinutes = Math.ceil(durationSeconds / 60);
         }
       } catch (e) {
@@ -244,6 +260,101 @@ app.post('/api/emergency/intake', async (c) => {
 
   } catch (error) {
     console.error("Intake Error:", error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Allowed ambulance status values
+const VALID_AMBULANCE_STATUSES = ['available', 'dispatched', 'at_scene', 'transporting', 'off_duty'] as const;
+
+// P1-005: Green Corridor — traffic police grants priority route clearance
+// Broadcasts 'corridor:granted' event so dispatcher + driver dashboards can show green light status
+app.post('/api/corridor/grant', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { incident_id } = body
+    // BUG-T007 fix: validate incident_id including empty-string check
+    if (!incident_id || typeof incident_id !== 'string' || incident_id.trim() === '') {
+      return c.json({ error: 'incident_id required' }, 400)
+    }
+
+    // Mark corridor in DB — propagate Supabase errors
+    const { error: dbError } = await supabase
+      .from('incidents')
+      .update({ corridor_granted: true, corridor_granted_at: new Date().toISOString() })
+      .eq('id', incident_id)
+
+    if (dbError) {
+      console.error('Corridor grant DB error:', dbError)
+      return c.json({ error: 'Database error updating corridor' }, 500)
+    }
+
+    // Broadcast to all connected dashboards
+    io.emit('corridor:granted', { incident_id, granted_at: new Date().toISOString() })
+    console.log(`🟢 Green corridor granted for incident ${incident_id}`)
+
+    return c.json({ success: true, incident_id })
+  } catch (error) {
+    console.error('Corridor grant error:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// P1-006: Driver status update — updates ambulance status in Supabase + broadcasts change
+app.post('/api/ambulance/status', async (c) => {
+  try {
+    const { ambulance_id, status } = await c.req.json()
+    if (!ambulance_id || !status) return c.json({ error: 'ambulance_id and status required' }, 400)
+
+    // BUG-T001 fix: validate status against allowed enum values
+    if (!(VALID_AMBULANCE_STATUSES as readonly string[]).includes(status)) {
+      return c.json({
+        error: `Invalid status. Must be one of: ${VALID_AMBULANCE_STATUSES.join(', ')}`
+      }, 400)
+    }
+
+    const { error: dbError } = await supabase
+      .from('ambulances')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', ambulance_id)
+
+    if (dbError) {
+      console.error('Ambulance status DB error:', dbError)
+      return c.json({ error: 'Database error updating ambulance' }, 500)
+    }
+
+    io.emit('ambulance:status', { ambulance_id, status })
+    console.log(`🚑 Ambulance ${ambulance_id} → status: ${status}`)
+
+    return c.json({ success: true, ambulance_id, status })
+  } catch (error) {
+    console.error('Ambulance status error:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// P1-007: Incident update — hospital marks patient as admitted/resolved
+app.post('/api/incident/update', async (c) => {
+  try {
+    const { incident_id, status } = await c.req.json()
+    if (!incident_id || !status) return c.json({ error: 'incident_id and status required' }, 400)
+
+    const { error: dbError } = await supabase
+      .from('incidents')
+      .update({ status, resolved_at: status === 'resolved' ? new Date().toISOString() : null })
+      .eq('id', incident_id)
+
+    if (dbError) {
+      console.error('Incident update DB error:', dbError)
+      return c.json({ error: 'Database error updating incident' }, 500)
+    }
+
+    io.emit('incident:updated', { incident_id, status })
+    console.log(`🏥 Incident ${incident_id} → status: ${status}`)
+
+    return c.json({ success: true, incident_id, status })
+  } catch (error) {
+    console.error('Incident update error:', error)
     return c.json({ error: 'Internal server error' }, 500)
   }
 })

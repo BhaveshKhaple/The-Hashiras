@@ -26,3 +26,7 @@
 ### Phase 5: Verification & Deployment
 - **5.1**: Comprehensive end-to-end testing of the demo scenarios.
 - **5.2**: Final deployment to Vercel and Railway.
+
+### Phase 6: Wrap up current phase in md doc
+- **6.1**: Document completed work for Phase 1 and 2.1.
+- **6.2**: Extract learnings and patterns.

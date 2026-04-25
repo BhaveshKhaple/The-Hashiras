@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
   --background: #0a0a0a;
@@ -10,12 +8,21 @@
   --glass-border: rgba(255, 255, 255, 0.1);
 }
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: 'Outfit', sans-serif;
-  overflow: hidden;
+  font-family: 'Outfit', 'Inter', sans-serif;
 }
+
+* { -webkit-user-select: none; user-select: none; }
+textarea, input { -webkit-user-select: text; user-select: text; }
 
 .glass {
   background: var(--glass);

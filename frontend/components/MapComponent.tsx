@@ -1,52 +1,7 @@
 'use client';
 
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { useEffect, useRef, useState } from 'react';
-
-// Custom icons using SVGs
-const createAmbulanceIcon = (heading: number, status: string) => {
-  const color = status === 'dispatched' ? '#ff3e3e' : '#4ade80';
-  return L.divIcon({
-    className: 'custom-div-icon',
-    html: `
-      <div style="transform: rotate(${heading}deg); transition: transform 0.5s ease-in-out;">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M5 10H19V19H5V10Z" fill="${color}" stroke="white" stroke-width="1"/>
-          <path d="M19 14L22 14V18H19V14Z" fill="${color}" stroke="white" stroke-width="1"/>
-          <path d="M7 19C7.55228 19 8 18.5523 8 18C8 17.4477 7.55228 17 7 17C6.44772 17 6 17.4477 6 18C6 18.5523 6.44772 19 7 19Z" fill="black"/>
-          <path d="M17 19C17.5523 19 18 18.5523 18 18C18 17.4477 17.5523 17 17 17C16.4477 17 16 17.4477 16 18C16 18.5523 16.4477 19 17 19Z" fill="black"/>
-          <rect x="9" y="12" width="6" height="4" fill="white" opacity="0.3"/>
-        </svg>
-      </div>
-    `,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-  });
-};
-
-const hospitalIcon = L.divIcon({
-  className: 'custom-div-icon',
-  html: `
-    <div class="bg-white border-2 border-blue-500 rounded-sm p-1 shadow-lg">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="blue" stroke-width="2">
-        <path d="M3 21h18M3 7v14M21 7v14M10 21v-8h4v8M7 3h10M12 3v4"/>
-        <path d="M10 11h4M12 9v4"/>
-      </svg>
-    </div>
-  `,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-});
-
-const incidentIcon = L.divIcon({
-  className: 'custom-div-icon',
-  html: `
-    <div class="animate-pulse-red bg-red-600 border-2 border-white rounded-full w-4 h-4 shadow-lg"></div>
-  `,
-  iconSize: [16, 16],
-  iconAnchor: [8, 8],
-});
 
 interface MapProps {
   ambulances: any[];
@@ -54,115 +9,376 @@ interface MapProps {
   incidents: any[];
 }
 
-import { socket } from '../lib/socket';
+// ── Custom Leaflet Icons ─────────────────────────────────────────────────────
 
-function AmbulanceMarker({ ambulance }: { ambulance: any }) {
-  const markerRef = useRef<L.Marker>(null);
+/**
+ * Ambulance icon colored by TYPE (not status).
+ * ALS (Advanced Life Support) → Red vehicle
+ * BLS (Basic Life Support)    → Green vehicle
+ */
+function makeAmbulanceIcon(type: string, heading: number = 0) {
+  const isAdvanced = type === 'ALS';
+  const bodyColor  = isAdvanced ? '#ef4444' : '#22c55e';
+  const glowColor  = isAdvanced ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.35)';
+  const label      = isAdvanced ? 'ALS' : 'BLS';
 
-  useEffect(() => {
-    // Ensure socket is connected
-    if (!socket.connected) socket.connect();
-
-    const onLocationUpdate = (data: any) => {
-      if (data.ambulance_id === ambulance.id && markerRef.current) {
-        // Update position directly without triggering React re-render
-        markerRef.current.setLatLng([data.lat, data.lng]);
-        
-        // Update heading rotation smoothly
-        const el = markerRef.current.getElement();
-        if (el) {
-          const div = el.querySelector('div');
-          if (div) {
-            div.style.transform = `rotate(${data.heading || 0}deg)`;
-          }
-        }
-      }
-    };
-
-    socket.on('ambulance:location', onLocationUpdate);
-    return () => {
-      socket.off('ambulance:location', onLocationUpdate);
-    };
-  }, [ambulance.id]);
-
-  return (
-    <Marker 
-      ref={markerRef}
-      position={[ambulance.lat || 19.0760, ambulance.lng || 72.8777]} 
-      icon={createAmbulanceIcon(ambulance.heading || 0, ambulance.status)}
-    >
-      <Popup>
-        <div className="p-1">
-          <h3 className="font-bold">{ambulance.name}</h3>
-          <p className="text-xs">Driver: {ambulance.driver_name}</p>
-          <p className="text-xs uppercase font-mono">{ambulance.status}</p>
+  return L.divIcon({
+    className: '',
+    html: `
+      <div style="
+        position:relative;
+        width:40px;height:40px;
+        display:flex;align-items:center;justify-content:center;
+      ">
+        <div style="
+          transform:rotate(${heading}deg);
+          transition:transform 0.5s ease;
+          filter:drop-shadow(0 0 6px ${glowColor});
+        ">
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Body -->
+            <rect x="4" y="12" width="22" height="14" rx="2" fill="${bodyColor}" stroke="white" stroke-width="1.5"/>
+            <!-- Cab -->
+            <rect x="22" y="16" width="8" height="10" rx="1" fill="${bodyColor}" stroke="white" stroke-width="1.5"/>
+            <!-- Red cross on body -->
+            <rect x="11" y="15" width="8" height="2.5" rx="0.5" fill="white"/>
+            <rect x="13.75" y="13" width="2.5" height="7" rx="0.5" fill="white"/>
+            <!-- Wheels -->
+            <circle cx="10" cy="26" r="3" fill="#1f2937" stroke="white" stroke-width="1.2"/>
+            <circle cx="24" cy="26" r="3" fill="#1f2937" stroke="white" stroke-width="1.2"/>
+            <!-- Siren light -->
+            <rect x="10" y="10" width="8" height="3" rx="1" fill="${isAdvanced ? '#fbbf24' : '#60a5fa'}" stroke="white" stroke-width="0.5"/>
+          </svg>
         </div>
-      </Popup>
-    </Marker>
-  );
+        <div style="
+          position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);
+          background:${bodyColor};color:white;
+          font-size:8px;font-weight:700;letter-spacing:0.5px;
+          padding:1px 4px;border-radius:3px;white-space:nowrap;
+          font-family:monospace;
+          box-shadow:0 1px 4px rgba(0,0,0,0.4);
+        ">${label}</div>
+      </div>
+    `,
+    iconSize: [40, 54],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -24],
+  });
 }
 
+/** Hospital icon — distinct blue H+ cross */
+function makeHospitalIcon(beds: number = 0) {
+  const bedColor = beds > 10 ? '#22c55e' : beds > 0 ? '#f59e0b' : '#ef4444';
+  return L.divIcon({
+    className: '',
+    html: `
+      <div style="
+        position:relative;
+        width:38px;height:38px;
+        display:flex;align-items:center;justify-content:center;
+      ">
+        <div style="
+          width:34px;height:34px;
+          background:#1d4ed8;
+          border:2.5px solid white;
+          border-radius:6px;
+          box-shadow:0 2px 8px rgba(29,78,216,0.5);
+          display:flex;align-items:center;justify-content:center;
+          position:relative;
+        ">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <rect x="9" y="2" width="4" height="18" rx="1" fill="white"/>
+            <rect x="2" y="9" width="18" height="4" rx="1" fill="white"/>
+          </svg>
+          <div style="
+            position:absolute;top:-4px;right:-4px;
+            width:10px;height:10px;
+            background:${bedColor};
+            border:2px solid white;
+            border-radius:50%;
+          "></div>
+        </div>
+      </div>
+    `,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
+    popupAnchor: [0, -22],
+  });
+}
+
+/** Patient/Incident marker — large pulsing red SOS cross */
+function makeIncidentIcon(severity: string = 'MODERATE') {
+  const isCritical = severity === 'CRITICAL';
+  return L.divIcon({
+    className: '',
+    html: `
+      <div style="
+        position:relative;
+        width:48px;height:48px;
+        display:flex;align-items:center;justify-content:center;
+      ">
+        <div style="
+          position:absolute;
+          width:48px;height:48px;
+          border-radius:50%;
+          background:rgba(239,68,68,0.15);
+          animation:pulseRing 1.8s ease-out infinite;
+        "></div>
+        <div style="
+          position:absolute;
+          width:36px;height:36px;
+          border-radius:50%;
+          background:rgba(239,68,68,0.25);
+          animation:pulseRing 1.8s ease-out infinite 0.4s;
+        "></div>
+        <div style="
+          width:26px;height:26px;
+          background:#dc2626;
+          border:2.5px solid white;
+          border-radius:50%;
+          box-shadow:0 0 12px rgba(220,38,38,0.7);
+          display:flex;align-items:center;justify-content:center;
+          position:relative;z-index:2;
+        ">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="7" y="2" width="2" height="12" rx="0.5" fill="white"/>
+            <rect x="2" y="7" width="12" height="2" rx="0.5" fill="white"/>
+          </svg>
+        </div>
+        ${isCritical ? `<div style="
+          position:absolute;top:-8px;left:50%;transform:translateX(-50%);
+          background:#dc2626;color:white;
+          font-size:7px;font-weight:800;letter-spacing:0.5px;
+          padding:1px 4px;border-radius:3px;white-space:nowrap;
+          font-family:sans-serif;
+        ">CRITICAL</div>` : ''}
+      </div>
+      <style>
+        @keyframes pulseRing {
+          0%   { transform:scale(0.8); opacity:1; }
+          100% { transform:scale(1.6); opacity:0; }
+        }
+      </style>
+    `,
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
+    popupAnchor: [0, -28],
+  });
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+
 export default function MapComponent({ ambulances, hospitals, incidents }: MapProps) {
-  const [center] = useState<[number, number]>([19.0760, 72.8777]); // Mumbai Center
+  const mapRef       = useRef<L.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null!);
+  const [ready, setReady] = useState(false);
 
-  return (
-    <MapContainer center={center} zoom={13} scrollWheelZoom={true} zoomControl={false}>
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      />
-      
-      {/* Hospitals */}
-      {hospitals.map((h) => (
-        <Marker key={h.id} position={[h.lat, h.lng]} icon={hospitalIcon}>
-          <Popup className="glass">
-            <div className="p-2">
-              <h3 className="font-bold text-blue-400">{h.name}</h3>
-              <p className="text-xs">Beds: {h.available_beds}</p>
-              <div className="flex gap-1 mt-1">
-                {h.capabilities?.map((c: string) => (
-                  <span key={c} className="text-[10px] bg-blue-900 px-1 rounded">{c}</span>
-                ))}
+  // ── Persistent marker refs (NO destroy/recreate) ──────────────────────────
+  // Key = entity id, Value = Leaflet marker instance
+  const ambMarkersRef  = useRef<Map<string, L.Marker>>(new Map());
+  const hospMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  const incMarkersRef  = useRef<Map<string, L.Marker>>(new Map());
+  const routeLinesRef  = useRef<Map<string, L.Polyline>>(new Map());
+
+  // Initialize map ONCE — center on Mumbai
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = L.map(containerRef.current, {
+      center: [19.0760, 72.8777],
+      zoom: 12,
+      zoomControl: false,
+      scrollWheelZoom: true,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    mapRef.current = map;
+    setReady(true);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      ambMarkersRef.current.clear();
+      hospMarkersRef.current.clear();
+      incMarkersRef.current.clear();
+      routeLinesRef.current.clear();
+    };
+  }, []);
+
+  // ── Update AMBULANCE markers (move in-place, no destroy) ──────────────────
+  useEffect(() => {
+    if (!mapRef.current || !ready) return;
+    const map = mapRef.current;
+    const existing = ambMarkersRef.current;
+    const currentIds = new Set<string>();
+
+    ambulances.forEach((a) => {
+      const lat = a.lat ?? a.latitude;
+      const lng = a.lng ?? a.longitude;
+      if (!lat || !lng) return;
+
+      const id = a.id || a.name || `amb-${lat}-${lng}`;
+      currentIds.add(id);
+
+      const marker = existing.get(id);
+      if (marker) {
+        // MOVE existing marker smoothly — this is the key fix for "ghost ambulance"
+        const newLatLng = L.latLng(lat, lng);
+        const oldLatLng = marker.getLatLng();
+
+        // Only update if position actually changed (avoids redundant DOM ops)
+        if (oldLatLng.lat !== lat || oldLatLng.lng !== lng) {
+          marker.setLatLng(newLatLng);
+        }
+
+        // Update icon for heading rotation
+        const newIcon = makeAmbulanceIcon(a.type || 'BLS', a.heading || 0);
+        marker.setIcon(newIcon);
+      } else {
+        // CREATE new marker only if it doesn't exist yet
+        const icon = makeAmbulanceIcon(a.type || 'BLS', a.heading || 0);
+        const typeLabel = a.type === 'ALS' ? '🔴 Advanced (ALS)' : '🟢 Standard (BLS)';
+
+        const newMarker = L.marker([lat, lng], { icon })
+          .bindPopup(`
+            <div style="font-family:sans-serif;min-width:160px">
+              <b style="font-size:13px">${a.name || 'Ambulance'}</b>
+              <div style="color:#666;font-size:11px;margin-top:4px">${typeLabel}</div>
+              <div style="margin-top:6px;font-size:12px">
+                👤 ${a.driver_name || 'N/A'}<br/>
+                📍 Status: <b>${a.status || 'idle'}</b>
               </div>
             </div>
-          </Popup>
-        </Marker>
-      ))}
+          `, { maxWidth: 200 })
+          .addTo(map);
 
-      {/* Ambulances */}
-      {ambulances.map((a) => (
-        <AmbulanceMarker key={a.id} ambulance={a} />
-      ))}
+        existing.set(id, newMarker);
+      }
+    });
 
-      {/* Incidents */}
-      {incidents.map((i) => (
-        <Marker key={i.id} position={[i.lat, i.lng]} icon={incidentIcon}>
-          <Popup>
-            <div className="p-2 min-w-[200px]">
-              <div className="flex justify-between items-start">
-                <span className={`text-[10px] font-bold px-1 rounded ${
-                  i.severity === 'CRITICAL' ? 'bg-red-600' : 'bg-orange-500'
-                }`}>{i.severity}</span>
-                <span className="text-[10px] text-gray-400">{new Date(i.created_at).toLocaleTimeString()}</span>
+    // Remove markers for ambulances no longer in the data
+    for (const [id, marker] of existing) {
+      if (!currentIds.has(id)) {
+        map.removeLayer(marker);
+        existing.delete(id);
+      }
+    }
+  }, [ambulances, ready]);
+
+  // ── Update HOSPITAL markers (static, rarely change) ───────────────────────
+  useEffect(() => {
+    if (!mapRef.current || !ready) return;
+    const map = mapRef.current;
+    const existing = hospMarkersRef.current;
+    const currentIds = new Set<string>();
+
+    hospitals.forEach((h) => {
+      const lat = h.lat ?? h.latitude;
+      const lng = h.lng ?? h.longitude;
+      if (!lat || !lng) return;
+
+      const id = h.id || h.name || `hosp-${lat}-${lng}`;
+      currentIds.add(id);
+
+      if (!existing.has(id)) {
+        const icon = makeHospitalIcon(h.available_beds);
+        const dotColor = (h.available_beds ?? 0) > 10 ? '#22c55e' : (h.available_beds ?? 0) > 0 ? '#f59e0b' : '#ef4444';
+
+        const marker = L.marker([lat, lng], { icon })
+          .bindPopup(`
+            <div style="font-family:sans-serif;min-width:180px">
+              <b style="font-size:13px">🏥 ${h.name || 'Hospital'}</b>
+              <div style="margin-top:6px;font-size:12px">
+                🛏 Beds: <b style="color:${dotColor}">${h.available_beds ?? 'N/A'} free</b>
+                ${h.capabilities ? `<br/>⚕️ ${h.capabilities.slice(0,3).join(', ')}` : ''}
               </div>
-              <h4 className="font-bold mt-1 text-sm">{i.emergency_text.substring(0, 50)}...</h4>
-              <p className="text-xs text-gray-300 mt-1">{i.patient_summary}</p>
             </div>
-          </Popup>
-        </Marker>
-      ))}
+          `, { maxWidth: 220 })
+          .addTo(map);
 
-      {/* Routes */}
-      {incidents.filter(i => i.route_geojson).map(i => {
-        const coords = i.route_geojson.features[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
-        return (
-          <Polyline 
-            key={`route-${i.id}`} 
-            positions={coords} 
-            pathOptions={{ color: '#ff3e3e', weight: 4, opacity: 0.6, dashArray: '10, 10' }} 
-          />
-        );
-      })}
-    </MapContainer>
-  );
+        existing.set(id, marker);
+      }
+    });
+
+    for (const [id, marker] of existing) {
+      if (!currentIds.has(id)) {
+        map.removeLayer(marker);
+        existing.delete(id);
+      }
+    }
+  }, [hospitals, ready]);
+
+  // ── Update INCIDENT markers + route polylines ─────────────────────────────
+  useEffect(() => {
+    if (!mapRef.current || !ready) return;
+    const map = mapRef.current;
+    const existingMarkers = incMarkersRef.current;
+    const existingRoutes  = routeLinesRef.current;
+    const currentIds = new Set<string>();
+
+    incidents.forEach((i) => {
+      const lat = i.lat ?? i.latitude;
+      const lng = i.lng ?? i.longitude;
+      if (!lat || !lng) return;
+
+      const id = i.id || `inc-${lat}-${lng}`;
+      currentIds.add(id);
+
+      // Incident marker
+      if (!existingMarkers.has(id)) {
+        const icon = makeIncidentIcon(i.severity);
+
+        const marker = L.marker([lat, lng], { icon })
+          .bindPopup(`
+            <div style="font-family:sans-serif;min-width:180px">
+              <b style="color:#dc2626;font-size:13px">🚨 ${i.severity || 'EMERGENCY'}</b>
+              <div style="margin-top:6px;font-size:12px;line-height:1.5">
+                ${i.emergency_text?.substring(0, 100) || 'Emergency in progress'}
+                ${i.eta_minutes ? `<br/>⏱ ETA: ~${i.eta_minutes} min` : ''}
+              </div>
+            </div>
+          `, { maxWidth: 240 })
+          .addTo(map);
+
+        existingMarkers.set(id, marker);
+      }
+
+      // Route polyline
+      if (i.route_geojson && !existingRoutes.has(id)) {
+        try {
+          const coords = i.route_geojson.features[0].geometry.coordinates
+            .map((c: [number, number]) => [c[1], c[0]] as [number, number]);
+          const line = L.polyline(coords, {
+            color: '#ef4444',
+            weight: 4,
+            opacity: 0.75,
+            dashArray: '12, 8',
+          }).addTo(map);
+          existingRoutes.set(id, line);
+        } catch { /* skip malformed routes */ }
+      }
+    });
+
+    // Remove stale incident markers and routes
+    for (const [id, marker] of existingMarkers) {
+      if (!currentIds.has(id)) {
+        map.removeLayer(marker);
+        existingMarkers.delete(id);
+      }
+    }
+    for (const [id, line] of existingRoutes) {
+      if (!currentIds.has(id)) {
+        map.removeLayer(line);
+        existingRoutes.delete(id);
+      }
+    }
+  }, [incidents, ready]);
+
+  return <div ref={containerRef} className="w-full h-full" />;
 }
