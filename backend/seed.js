@@ -1,4 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
+import { config } from 'dotenv';
+import path from 'path';
+
+// Load .env from root
+config({ path: path.resolve(process.cwd(), '../.env') });
 
 // Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to bypass RLS
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
