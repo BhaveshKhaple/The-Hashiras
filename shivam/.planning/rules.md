@@ -5,7 +5,6 @@
 2. **Speed Over Elegance**: Avoid complex abstractions. Use the provided tech stack (Next.js, Hono, Supabase) to deliver features fast.
 3. **Parallel Workflow**: Respect the API contracts defined in `.planning/context.md` (or similar) to allow backend and frontend to work simultaneously.
 4. **No Placeholders**: Never use "lorem ipsum" or dummy images. Generate realistic data using `Faker.js` or `generate_image`.
-5. **NO SIMULATION / NO FAKING**: If a real API (Gemini, ORS, Supabase) is not working, do NOT simulate its response with hardcoded/mock data. Instead, return a clear error message to the caller (e.g., `{ error: "Gemini API unreachable" }`). The system must fail honestly — never pretend a feature works by faking the response. The only exception is `simulator.js`, which is explicitly a testing tool for GPS movement.
 
 ## Git & Commits
 1. **Commit Pacing**: Minimum 8 minutes between commits. Max 4 per hour.

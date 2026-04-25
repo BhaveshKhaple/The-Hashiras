@@ -20,3 +20,8 @@ STEPS: Create DEPLOYMENT.md with CLI commands.
 TASK: Build Ambulance GPS Movement Simulator
 GOAL: Create standalone script that simulates dispatched ambulance driving along GeoJSON route via Socket.IO.
 OUTPUT: simulator.js, updated index.ts Socket.IO handler, added socket.io-client dep.
+
+[2026-04-25 14:31] PROMPT FROM FRONTEND DEV:
+TASK: Optimize Leaflet Map for Real-time Socket Updates
+GOAL: Implement a React-Leaflet map that listens to Socket.IO ambulance:location events and updates the marker position without triggering a full component re-render.
+OUTPUT: Ref-based AmbulanceMarker in MapComponent.tsx

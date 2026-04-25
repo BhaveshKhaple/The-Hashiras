@@ -156,7 +156,7 @@ app.post('/api/emergency/intake', async (c) => {
       return c.json({ error: 'Missing emergency_text, lat, or lng' }, 400)
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", systemInstruction: systemPrompt })
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite", systemInstruction: systemPrompt })
     const prompt = `Emergency description: ${emergency_text}\nLocation: ${lat}, ${lng}`
     const result = await model.generateContent(prompt)
     const responseText = result.response.text()

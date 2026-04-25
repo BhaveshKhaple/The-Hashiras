@@ -1,0 +1,10 @@
+node_modules
+.env
+.env.local
+.next
+dist
+build
+.DS_Store
+*.log
+# Added by code-review-graph
+.code-review-graph/
