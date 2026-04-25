@@ -19,7 +19,7 @@ export default function DispatcherDashboard() {
 
   useEffect(() => {
     fetchInitialData();
-    setupSubscriptions();
+    const cleanupSupabase = setupSubscriptions();
     
     socket.connect();
     socket.on('ambulance:location', (data) => {
@@ -37,6 +37,7 @@ export default function DispatcherDashboard() {
 
     return () => {
       socket.disconnect();
+      cleanupSupabase();
     };
   }, []);
 

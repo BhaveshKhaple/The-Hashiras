@@ -248,4 +248,25 @@ app.post('/api/emergency/intake', async (c) => {
   }
 })
 
+app.post('/api/ambulance/status', async (c) => {
+  try {
+    const { ambulance_id, status, incident_id } = await c.req.json();
+    if (!ambulance_id || !status) return c.json({ error: 'Missing required fields' }, 400);
+
+    // Update ambulance status
+    await supabase.from('ambulances').update({ status }).eq('id', ambulance_id);
+
+    // If job is complete, update incident as well
+    if (status === 'available' && incident_id) {
+      await supabase.from('incidents').update({ status: 'resolved' }).eq('id', incident_id);
+    }
+
+    io.emit('ambulance:status_update', { ambulance_id, status, incident_id });
+    return c.json({ success: true });
+  } catch (error: any) {
+    console.error("Status Update Error:", error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 export default app

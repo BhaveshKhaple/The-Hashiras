@@ -104,9 +104,19 @@ function AmbulanceMarker({ ambulance }: { ambulance: any }) {
 
 export default function MapComponent({ ambulances, hospitals, incidents }: MapProps) {
   const [center] = useState<[number, number]>([19.0760, 72.8777]); // Mumbai Center
+  const mapRef = useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
 
   return (
-    <MapContainer center={center} zoom={13} scrollWheelZoom={true} zoomControl={false}>
+    <MapContainer ref={mapRef} center={center} zoom={13} scrollWheelZoom={true} zoomControl={false}>
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
