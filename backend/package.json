@@ -4,14 +4,20 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "dev": "bun run --hot index.ts",
-    "start": "bun run index.ts"
+    "dev": "tsx watch index.ts",
+    "start": "tsx index.ts",
+    "simulator": "node simulator.js",
+    "seed": "node seed.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@hono/node-server": "^2.0.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^17.4.2",
     "hono": "^4.6.0",
     "socket.io": "^4.8.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "@google/generative-ai": "^0.21.0"
+    "socket.io-client": "^4.8.0",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@types/node": "^20"
