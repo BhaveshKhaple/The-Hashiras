@@ -20,7 +20,7 @@ const ROLES = [
     icon: Ambulance,
     color: "#22c55e",
     gradient: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
-    ready: false,
+    ready: true,
   },
   {
     title: "Hospital",
@@ -29,7 +29,7 @@ const ROLES = [
     icon: Building2,
     color: "#3b82f6",
     gradient: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
-    ready: false,
+    ready: true,
   },
   {
     title: "Traffic Police",
@@ -38,7 +38,7 @@ const ROLES = [
     icon: ShieldCheck,
     color: "#eab308",
     gradient: "linear-gradient(135deg, #eab308 0%, #ca8a04 100%)",
-    ready: false,
+    ready: true,
   },
 ];
 

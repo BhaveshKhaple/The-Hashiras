@@ -85,10 +85,27 @@ export interface DispatchEvent {
   route: OrsRouteResponse | null;
 }
 
+export interface AmbulanceLocationEvent {
+  ambulance_id: string;
+  incident_id: string;
+  lng: number;
+  lat: number;
+  heading: number;
+  speed_kmh: number;
+  timestamp: string;
+  progress: number; // 0-100
+}
+
+export interface RerouteEvent {
+  incident_id: string;
+  route: OrsRouteResponse;
+}
+
 // ── Map Types ───────────────────────────────────────────
 
 export interface MapMarker {
   position: [number, number]; // [lat, lng]
-  type: "patient" | "ambulance" | "hospital";
+  type: "patient" | "ambulance" | "hospital" | "waypoint" | "roadblock";
   label?: string;
 }
+

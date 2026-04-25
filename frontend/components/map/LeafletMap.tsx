@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import L from "leaflet";
 import type { MapMarker, OrsRouteResponse } from "@/types";
 
@@ -15,10 +15,44 @@ function createIcon(emoji: string, size: number = 32): L.DivIcon {
   });
 }
 
-const ICONS: Record<MapMarker["type"], L.DivIcon> = {
+function createPulsingDot(color: string = "#22c55e"): L.DivIcon {
+  return L.divIcon({
+    html: `
+      <div style="position:relative;width:20px;height:20px;">
+        <div style="
+          position:absolute;inset:0;
+          border-radius:50%;
+          background:${color};
+          opacity:0.3;
+          animation: ambulance-pulse 1.5s ease-out infinite;
+        "></div>
+        <div style="
+          position:absolute;top:4px;left:4px;width:12px;height:12px;
+          border-radius:50%;
+          background:${color};
+          border:2px solid white;
+          box-shadow:0 0 8px ${color};
+        "></div>
+      </div>
+      <style>
+        @keyframes ambulance-pulse {
+          0% { transform: scale(1); opacity: 0.4; }
+          100% { transform: scale(2.5); opacity: 0; }
+        }
+      </style>
+    `,
+    className: "",
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+}
+
+const ICONS: Record<string, L.DivIcon> = {
   patient: createIcon("📍", 30),
   ambulance: createIcon("🚑", 34),
   hospital: createIcon("🏥", 30),
+  waypoint: createIcon("📌", 26),
+  roadblock: createIcon("🚧", 34),
 };
 
 /* ── Component props ──────────────────────────────────────── */
@@ -28,8 +62,11 @@ interface LeafletMapProps {
   zoom?: number;
   markers?: MapMarker[];
   routeGeoJSON?: OrsRouteResponse | null;
+  routeColor?: string;
+  ambulancePosition?: [number, number] | null; // live GPS [lat, lng]
   onMapClick?: (lat: number, lng: number) => void;
   className?: string;
+  followAmbulance?: boolean;
 }
 
 /* ── LeafletMap (vanilla Leaflet, no SSR issues) ──────────── */
@@ -39,13 +76,17 @@ export default function LeafletMap({
   zoom = 13,
   markers = [],
   routeGeoJSON = null,
+  routeColor = "#ef4444",
+  ambulancePosition = null,
   onMapClick,
   className = "",
+  followAmbulance = false,
 }: LeafletMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const routeLayerRef = useRef<L.GeoJSON | null>(null);
+  const ambulanceMarkerRef = useRef<L.Marker | null>(null);
 
   /* ── Initialize map ────────────────────────────────────── */
   useEffect(() => {
@@ -103,7 +144,8 @@ export default function LeafletMap({
 
     layer.clearLayers();
     markers.forEach((m) => {
-      const marker = L.marker(m.position, { icon: ICONS[m.type] });
+      const icon = ICONS[m.type] || ICONS.waypoint;
+      const marker = L.marker(m.position, { icon });
       if (m.label) {
         marker.bindTooltip(m.label, {
           permanent: false,
@@ -130,7 +172,7 @@ export default function LeafletMap({
 
     const routeLayer = L.geoJSON(routeGeoJSON as unknown as GeoJSON.GeoJsonObject, {
       style: {
-        color: "#ef4444",
+        color: routeColor,
         weight: 4,
         opacity: 0.85,
         dashArray: undefined,
@@ -146,7 +188,38 @@ export default function LeafletMap({
     if (bounds.isValid()) {
       map.fitBounds(bounds, { padding: [50, 50] });
     }
-  }, [routeGeoJSON]);
+  }, [routeGeoJSON, routeColor]);
+
+  /* ── Sync ambulance live position (pulsing dot) ────────── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!ambulancePosition) {
+      // Remove marker if position cleared
+      if (ambulanceMarkerRef.current) {
+        map.removeLayer(ambulanceMarkerRef.current);
+        ambulanceMarkerRef.current = null;
+      }
+      return;
+    }
+
+    if (ambulanceMarkerRef.current) {
+      // Smoothly update position
+      ambulanceMarkerRef.current.setLatLng(ambulancePosition);
+    } else {
+      // Create new pulsing dot marker
+      ambulanceMarkerRef.current = L.marker(ambulancePosition, {
+        icon: createPulsingDot("#22c55e"),
+        zIndexOffset: 1000,
+      }).addTo(map);
+    }
+
+    // Follow ambulance if enabled
+    if (followAmbulance) {
+      map.panTo(ambulancePosition, { animate: true, duration: 1 });
+    }
+  }, [ambulancePosition, followAmbulance]);
 
   return (
     <div
