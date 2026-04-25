@@ -1,0 +1,271 @@
+@import "tailwindcss";
+
+/* ── LifeLink Design System ─────────────────────────────── */
+
+:root {
+  /* Base palette - deep navy emergency theme */
+  --bg-primary: #060a13;
+  --bg-secondary: #0c1220;
+  --bg-panel: #111827;
+  --bg-elevated: #1a2236;
+  --bg-glass: rgba(17, 24, 39, 0.7);
+  
+  /* Text */
+  --text-primary: #f0f4f8;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  
+  /* Accent - emergency red */
+  --accent-primary: #ef4444;
+  --accent-primary-glow: rgba(239, 68, 68, 0.3);
+  
+  /* Severity palette */
+  --severity-critical: #ef4444;
+  --severity-critical-bg: rgba(239, 68, 68, 0.12);
+  --severity-high: #f97316;
+  --severity-high-bg: rgba(249, 115, 22, 0.12);
+  --severity-moderate: #eab308;
+  --severity-moderate-bg: rgba(234, 179, 8, 0.12);
+  --severity-low: #22c55e;
+  --severity-low-bg: rgba(34, 197, 94, 0.12);
+  
+  /* Status colors */
+  --status-active: #3b82f6;
+  --status-dispatched: #f97316;
+  --status-available: #22c55e;
+  
+  /* Borders */
+  --border-subtle: rgba(148, 163, 184, 0.1);
+  --border-hover: rgba(148, 163, 184, 0.2);
+  
+  /* Shadows */
+  --shadow-glow: 0 0 20px rgba(239, 68, 68, 0.15);
+  --shadow-panel: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Global resets ──────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* ── Glass panel ────────────────────────────────────────── */
+
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow: var(--shadow-panel);
+}
+
+.glass-panel-sm {
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+
+/* ── Severity badges ────────────────────────────────────── */
+
+.badge-critical {
+  background: var(--severity-critical-bg);
+  color: var(--severity-critical);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-high {
+  background: var(--severity-high-bg);
+  color: var(--severity-high);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.badge-moderate {
+  background: var(--severity-moderate-bg);
+  color: var(--severity-moderate);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.badge-low {
+  background: var(--severity-low-bg);
+  color: var(--severity-low);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+/* ── Animations ─────────────────────────────────────────── */
+
+@keyframes pulse-emergency {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-primary-glow); }
+  50% { box-shadow: 0 0 0 12px transparent; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out both;
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.4s ease-out both;
+}
+
+.animate-pulse-emergency {
+  animation: pulse-emergency 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ── Button styles ──────────────────────────────────────── */
+
+.btn-dispatch {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  font-size: 0.875rem;
+}
+
+.btn-dispatch:hover:not(:disabled) {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+
+.btn-dispatch:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-dispatch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Input styles ───────────────────────────────────────── */
+
+.input-dark {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  outline: none;
+}
+
+.input-dark:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
+.input-dark::placeholder {
+  color: var(--text-muted);
+}
+
+.textarea-dark {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  resize: vertical;
+  min-height: 120px;
+  outline: none;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.textarea-dark:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
+.textarea-dark::placeholder {
+  color: var(--text-muted);
+}
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-hover);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ── Leaflet overrides ──────────────────────────────────── */
+
+.leaflet-container {
+  background: var(--bg-secondary) !important;
+  border-radius: 16px;
+}
+
+.leaflet-control-zoom {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+  background: var(--bg-panel) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: var(--bg-elevated) !important;
+}
+
+/* ── Toast / Alert ──────────────────────────────────────── */
+
+.dispatch-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  animation: slide-in-right 0.4s ease-out both;
+}
