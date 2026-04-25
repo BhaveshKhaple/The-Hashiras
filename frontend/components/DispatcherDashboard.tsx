@@ -10,6 +10,11 @@ import { Activity, Map as MapIcon, Siren, Clock, Navigation, RefreshCw, AlertTri
 class DashboardErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
   static getDerivedStateFromError(error: Error) { return { error }; }
+  // BUG-T004 fix: log error details for dev visibility and debugging
+  componentDidCatch(error: Error, info: { componentStack: string }) {
+    console.error('[DashboardErrorBoundary] Caught error:', error.message);
+    console.error('[DashboardErrorBoundary] Component stack:', info.componentStack);
+  }
   render() {
     if (this.state.error) {
       return (
@@ -60,6 +65,8 @@ function DispatcherDashboardInner() {
     
     socket.connect();
     socket.on('ambulance:location', (data) => {
+      // Guard: skip if data is malformed
+      if (!data || typeof data.ambulance_id === 'undefined') return;
       setAmbulances(prev => prev.map(amb => 
         amb.id === data.ambulance_id 
           ? { ...amb, lat: data.lat, lng: data.lng, heading: data.heading } 
@@ -79,35 +86,112 @@ function DispatcherDashboardInner() {
       fetchIncidents();
     });
 
+    // Resilience: handle corridor:granted broadcast
+    socket.on('corridor:granted', (data) => {
+      if (!data?.incident_id) return;
+      console.log(`🟢 Corridor granted for incident ${data.incident_id}`);
+    });
+
+    // Resilience: handle incident:updated broadcast — refresh active incidents
+    socket.on('incident:updated', (data) => {
+      if (!data?.incident_id) return;
+      fetchIncidents();
+    });
+
     return () => {
+      socket.off('corridor:granted');
+      socket.off('incident:updated');
       socket.disconnect();
       // BUG-006 fix: call the returned cleanup so Supabase channel is removed on unmount
       if (cleanupSubs) cleanupSubs();
     };
   }, []);
 
+  /**
+   * Parse PostGIS geography WKB hex string → { lat, lng }
+   * Supabase returns GEOGRAPHY(POINT) columns as WKB hex, e.g.:
+   *   "0101000020E6100000..." (little-endian WKB with SRID)
+   * We decode bytes 5-12 (X = lng) and 13-20 (Y = lat) as little-endian float64.
+   */
+  const parsePostGISPoint = (wkb: string | null): { lat: number; lng: number } | null => {
+    if (!wkb || typeof wkb !== 'string') return null;
+    try {
+      // Strip leading SRID flag bytes (WKB with SRID is 25 bytes, plain is 21)
+      const hex = wkb.replace(/^[0-9a-f]{2}/i, '').replace(/^[0-9a-f]{8}/i, '').replace(/^[0-9a-f]{2}/i, '');
+      // Remaining: type (8 hex) + X (16 hex) + Y (16 hex), might also have SRID prefix
+      // Use a more reliable approach: look for 8-byte IEEE 754 float pairs
+      const clean = wkb.replace(/^01/, ''); // strip byte order
+      const withoutType = clean.slice(8);   // skip geometry type (4 bytes = 8 hex)
+      const withoutSrid = wkb.startsWith('0120') || wkb.startsWith('01010000a0') || wkb.startsWith('0101000020')
+        ? withoutType.slice(8) // skip SRID (4 bytes = 8 hex) for EWKB
+        : withoutType;
+      const readF64LE = (h: string) => {
+        const buf = new ArrayBuffer(8);
+        const view = new DataView(buf);
+        for (let i = 0; i < 8; i++) view.setUint8(i, parseInt(h.slice(i*2, i*2+2), 16));
+        return view.getFloat64(0, true);
+      };
+      const lng = readF64LE(withoutSrid.slice(0, 16));
+      const lat = readF64LE(withoutSrid.slice(16, 32));
+      if (isNaN(lat) || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+      return { lat, lng };
+    } catch { return null; }
+  };
+
+  // Mumbai fallback coords for demo mode (varied per index)
+  const MUMBAI_AMBULANCE_DEMOS = [
+    { lat: 19.1136, lng: 72.8479 }, // Andheri
+    { lat: 19.0596, lng: 72.8295 }, // Bandra
+    { lat: 19.0178, lng: 72.8410 }, // Dadar
+    { lat: 19.0730, lng: 72.8887 }, // Kurla
+    { lat: 19.2183, lng: 72.9781 }, // Thane
+    { lat: 19.0050, lng: 72.8178 }, // Worli
+  ];
+  const MUMBAI_HOSPITAL_DEMOS = [
+    { lat: 19.0523, lng: 72.8264 }, // Lilavati
+    { lat: 19.0019, lng: 72.8410 }, // KEM
+    { lat: 19.0549, lng: 72.8411 }, // Hinduja
+    { lat: 19.0974, lng: 72.8341 }, // Nanavati
+    { lat: 19.0257, lng: 72.8100 }, // Jaslok
+  ];
+
   const fetchInitialData = async () => {
     try {
       const { data: hosp } = await supabase.from('hospitals').select('*');
-      // BUG-004 fix: use real coords from DB if available; only fall back to demo area when null
-      const formattedHosp = (hosp || []).map(h => ({
+      const formattedHosp = (hosp || []).map((h, idx) => {
+        const parsed = parsePostGISPoint(h.location);
+        const demo = MUMBAI_HOSPITAL_DEMOS[idx % MUMBAI_HOSPITAL_DEMOS.length];
+        return {
           ...h,
-          // Supabase PostGIS geography returns as string; we store lat/lng via seed as numeric fallback
-          lat: h.lat ?? (19.07 + Math.random() * 0.05),
-          lng: h.lng ?? (72.87 + Math.random() * 0.05)
-      }));
+          lat: parsed?.lat ?? h.lat ?? demo.lat,
+          lng: parsed?.lng ?? h.lng ?? demo.lng,
+        };
+      });
       setHospitals(formattedHosp);
 
       const { data: amb } = await supabase.from('ambulances').select('*');
-      const formattedAmb = (amb || []).map(a => ({
+      const formattedAmb = (amb || []).map((a, idx) => {
+        const parsed = parsePostGISPoint(a.location);
+        const demo = MUMBAI_AMBULANCE_DEMOS[idx % MUMBAI_AMBULANCE_DEMOS.length];
+        return {
           ...a,
-          // BUG-004 fix: use real coords when available
-          lat: a.lat ?? (19.07 + Math.random() * 0.05),
-          lng: a.lng ?? (72.87 + Math.random() * 0.05)
-      }));
+          lat: parsed?.lat ?? a.lat ?? demo.lat,
+          lng: parsed?.lng ?? a.lng ?? demo.lng,
+        };
+      });
       setAmbulances(formattedAmb);
     } catch (err) {
       console.warn('Supabase not configured, running in demo mode:', err);
+      // Demo mode: show mock data on Mumbai map
+      setAmbulances([
+        { id: 'demo-1', name: 'AMB-001', type: 'ALS', status: 'available', driver_name: 'Demo Driver', lat: 19.1136, lng: 72.8479 },
+        { id: 'demo-2', name: 'AMB-002', type: 'BLS', status: 'available', driver_name: 'Demo Driver', lat: 19.0596, lng: 72.8295 },
+        { id: 'demo-3', name: 'AMB-003', type: 'ALS', status: 'available', driver_name: 'Demo Driver', lat: 19.0178, lng: 72.8410 },
+      ]);
+      setHospitals([
+        { id: 'demo-h1', name: 'Lilavati Hospital', available_beds: 18, lat: 19.0523, lng: 72.8264 },
+        { id: 'demo-h2', name: 'KEM Hospital', available_beds: 45, lat: 19.0019, lng: 72.8410 },
+      ]);
     }
 
     fetchIncidents();
@@ -119,15 +203,17 @@ function DispatcherDashboardInner() {
           .select('*')
           .eq('status', 'active')
           .order('created_at', { ascending: false });
-      
-      // BUG-007 fix: use real patient coords from DB; only randomize as demo fallback
-      const formattedInc = (inc || []).map(i => ({
+
+      const formattedInc = (inc || []).map((i, idx) => {
+        const parsed = parsePostGISPoint(i.patient_location);
+        return {
           ...i,
-          lat: i.lat ?? (19.05 + Math.random() * 0.05),
-          lng: i.lng ?? (72.82 + Math.random() * 0.05)
-      }));
+          lat: parsed?.lat ?? i.lat ?? (19.05 + idx * 0.008),
+          lng: parsed?.lng ?? i.lng ?? (72.82 + idx * 0.008),
+        };
+      });
       setIncidents(formattedInc);
-      
+
       setStats({
           active: inc?.length || 0,
           critical: inc?.filter(i => i.severity === 'CRITICAL').length || 0,

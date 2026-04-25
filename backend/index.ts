@@ -50,9 +50,14 @@ io.on('connection', (socket) => {
   
   // Listen for ambulance GPS updates from simulator or driver app
   socket.on('ambulance:location', (data) => {
+    // BUG-T003 fix: guard against missing/non-numeric lat/lng before broadcasting
+    if (typeof data?.lat !== 'number' || typeof data?.lng !== 'number') {
+      console.warn(`⚠️  ambulance:location skipped — invalid coords from ${socket.id}:`, data)
+      return
+    }
     // Broadcast to all other clients (dispatchers, hospitals, traffic police)
     socket.broadcast.emit('ambulance:location', data)
-    console.log(`📍 Ambulance ${data.ambulance_id} → [${data.lng?.toFixed(5)}, ${data.lat?.toFixed(5)}] (${data.progress}%)`)
+    console.log(`📍 Ambulance ${data.ambulance_id} → [${data.lng.toFixed(5)}, ${data.lat.toFixed(5)}] (${data.progress}%)`)
   })
 
   // Allow clients to join incident-specific rooms
@@ -259,18 +264,30 @@ app.post('/api/emergency/intake', async (c) => {
   }
 })
 
+// Allowed ambulance status values
+const VALID_AMBULANCE_STATUSES = ['available', 'dispatched', 'at_scene', 'transporting', 'off_duty'] as const;
+
 // P1-005: Green Corridor — traffic police grants priority route clearance
 // Broadcasts 'corridor:granted' event so dispatcher + driver dashboards can show green light status
 app.post('/api/corridor/grant', async (c) => {
   try {
-    const { incident_id } = await c.req.json()
-    if (!incident_id) return c.json({ error: 'incident_id required' }, 400)
+    const body = await c.req.json()
+    const { incident_id } = body
+    // BUG-T007 fix: validate incident_id including empty-string check
+    if (!incident_id || typeof incident_id !== 'string' || incident_id.trim() === '') {
+      return c.json({ error: 'incident_id required' }, 400)
+    }
 
-    // Mark corridor in DB
-    await supabase
+    // Mark corridor in DB — propagate Supabase errors
+    const { error: dbError } = await supabase
       .from('incidents')
       .update({ corridor_granted: true, corridor_granted_at: new Date().toISOString() })
       .eq('id', incident_id)
+
+    if (dbError) {
+      console.error('Corridor grant DB error:', dbError)
+      return c.json({ error: 'Database error updating corridor' }, 500)
+    }
 
     // Broadcast to all connected dashboards
     io.emit('corridor:granted', { incident_id, granted_at: new Date().toISOString() })
@@ -289,10 +306,22 @@ app.post('/api/ambulance/status', async (c) => {
     const { ambulance_id, status } = await c.req.json()
     if (!ambulance_id || !status) return c.json({ error: 'ambulance_id and status required' }, 400)
 
-    await supabase
+    // BUG-T001 fix: validate status against allowed enum values
+    if (!(VALID_AMBULANCE_STATUSES as readonly string[]).includes(status)) {
+      return c.json({
+        error: `Invalid status. Must be one of: ${VALID_AMBULANCE_STATUSES.join(', ')}`
+      }, 400)
+    }
+
+    const { error: dbError } = await supabase
       .from('ambulances')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', ambulance_id)
+
+    if (dbError) {
+      console.error('Ambulance status DB error:', dbError)
+      return c.json({ error: 'Database error updating ambulance' }, 500)
+    }
 
     io.emit('ambulance:status', { ambulance_id, status })
     console.log(`🚑 Ambulance ${ambulance_id} → status: ${status}`)
@@ -310,10 +339,15 @@ app.post('/api/incident/update', async (c) => {
     const { incident_id, status } = await c.req.json()
     if (!incident_id || !status) return c.json({ error: 'incident_id and status required' }, 400)
 
-    await supabase
+    const { error: dbError } = await supabase
       .from('incidents')
       .update({ status, resolved_at: status === 'resolved' ? new Date().toISOString() : null })
       .eq('id', incident_id)
+
+    if (dbError) {
+      console.error('Incident update DB error:', dbError)
+      return c.json({ error: 'Database error updating incident' }, 500)
+    }
 
     io.emit('incident:updated', { incident_id, status })
     console.log(`🏥 Incident ${incident_id} → status: ${status}`)
