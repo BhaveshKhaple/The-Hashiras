@@ -259,4 +259,70 @@ app.post('/api/emergency/intake', async (c) => {
   }
 })
 
+// P1-005: Green Corridor — traffic police grants priority route clearance
+// Broadcasts 'corridor:granted' event so dispatcher + driver dashboards can show green light status
+app.post('/api/corridor/grant', async (c) => {
+  try {
+    const { incident_id } = await c.req.json()
+    if (!incident_id) return c.json({ error: 'incident_id required' }, 400)
+
+    // Mark corridor in DB
+    await supabase
+      .from('incidents')
+      .update({ corridor_granted: true, corridor_granted_at: new Date().toISOString() })
+      .eq('id', incident_id)
+
+    // Broadcast to all connected dashboards
+    io.emit('corridor:granted', { incident_id, granted_at: new Date().toISOString() })
+    console.log(`🟢 Green corridor granted for incident ${incident_id}`)
+
+    return c.json({ success: true, incident_id })
+  } catch (error) {
+    console.error('Corridor grant error:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// P1-006: Driver status update — updates ambulance status in Supabase + broadcasts change
+app.post('/api/ambulance/status', async (c) => {
+  try {
+    const { ambulance_id, status } = await c.req.json()
+    if (!ambulance_id || !status) return c.json({ error: 'ambulance_id and status required' }, 400)
+
+    await supabase
+      .from('ambulances')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', ambulance_id)
+
+    io.emit('ambulance:status', { ambulance_id, status })
+    console.log(`🚑 Ambulance ${ambulance_id} → status: ${status}`)
+
+    return c.json({ success: true, ambulance_id, status })
+  } catch (error) {
+    console.error('Ambulance status error:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// P1-007: Incident update — hospital marks patient as admitted/resolved
+app.post('/api/incident/update', async (c) => {
+  try {
+    const { incident_id, status } = await c.req.json()
+    if (!incident_id || !status) return c.json({ error: 'incident_id and status required' }, 400)
+
+    await supabase
+      .from('incidents')
+      .update({ status, resolved_at: status === 'resolved' ? new Date().toISOString() : null })
+      .eq('id', incident_id)
+
+    io.emit('incident:updated', { incident_id, status })
+    console.log(`🏥 Incident ${incident_id} → status: ${status}`)
+
+    return c.json({ success: true, incident_id, status })
+  } catch (error) {
+    console.error('Incident update error:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
 export default app

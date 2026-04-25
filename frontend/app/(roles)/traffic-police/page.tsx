@@ -32,6 +32,14 @@ export default function TrafficPolicePage() {
   const [greenCorridors, setGreenCorridors] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [flagging, setFlagging] = useState(false);
+  // P1-002 fix: client-only clock to prevent hydration mismatch
+  const [currentTime, setCurrentTime] = useState('');
+
+  useEffect(() => {
+    setCurrentTime(new Date().toLocaleTimeString());
+    const timer = setInterval(() => setCurrentTime(new Date().toLocaleTimeString()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     fetchIncidents();
@@ -257,7 +265,7 @@ export default function TrafficPolicePage() {
           <div className="p-4 border-t border-white/10 bg-white/5">
             <div className="flex items-center gap-2 text-[11px] text-gray-400">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              System Active • {new Date().toLocaleTimeString()}
+              System Active{currentTime && ` • ${currentTime}`}
             </div>
           </div>
         </div>

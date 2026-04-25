@@ -1,17 +1,44 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Component, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { socket } from '@/lib/socket';
-import { Activity, Map as MapIcon, Siren, Clock, Navigation } from 'lucide-react';
+import { Activity, Map as MapIcon, Siren, Clock, Navigation, RefreshCw, AlertTriangle } from 'lucide-react';
+
+// P1-004: Error Boundary — catches runtime crashes in dashboard children (Leaflet, Supabase, sockets)
+class DashboardErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex h-screen bg-black text-white items-center justify-center flex-col gap-6">
+          <div className="bg-red-900/20 border border-red-800 rounded-2xl p-8 max-w-md text-center space-y-4">
+            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
+            <h2 className="text-xl font-bold">Dashboard Error</h2>
+            <p className="text-sm text-gray-400">{(this.state.error as Error).message}</p>
+            <button
+              onClick={() => this.setState({ error: null })}
+              className="flex items-center gap-2 mx-auto px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-all"
+            >
+              <RefreshCw className="w-4 h-4" /> Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const MapComponent = dynamic(() => import('./MapComponent'), { 
   ssr: false,
   loading: () => <div className="w-full h-full bg-neutral-900 animate-pulse flex items-center justify-center text-gray-500">Loading Map...</div>
 });
 
-export default function DispatcherDashboard() {
+
+function DispatcherDashboardInner() {
   const [ambulances, setAmbulances] = useState<any[]>([]);
   const [hospitals, setHospitals] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
@@ -229,5 +256,13 @@ export default function DispatcherDashboard() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DispatcherDashboard() {
+  return (
+    <DashboardErrorBoundary>
+      <DispatcherDashboardInner />
+    </DashboardErrorBoundary>
   );
 }

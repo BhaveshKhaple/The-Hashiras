@@ -25,6 +25,15 @@ export default function DriverPage() {
   const [ambulances, setAmbulances] = useState<any[]>([{ id: 'AMB-001', lat: 19.076, lng: 72.877, heading: 0, status: 'available', name: 'AMB-001', driver_name: 'You' }]);
   const [eta, setEta] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  // P1-003 fix: client-only clock to prevent hydration mismatch
+  const [currentTime, setCurrentTime] = useState('');
+
+
+  useEffect(() => {
+    setCurrentTime(new Date().toLocaleTimeString());
+    const timer = setInterval(() => setCurrentTime(new Date().toLocaleTimeString()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     socket.connect();
@@ -201,7 +210,7 @@ export default function DriverPage() {
           <div className="p-4 border-t border-white/10 bg-white/5">
             <div className="flex items-center gap-2 text-[11px] text-gray-400">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              Live GPS Active • {new Date().toLocaleTimeString()}
+              Live GPS Active {currentTime && `• ${currentTime}`}
             </div>
           </div>
         </div>
