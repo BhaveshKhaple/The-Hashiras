@@ -20,6 +20,8 @@ config({ path: path.resolve(process.cwd(), '../.env') });
 const SOCKET_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const EMIT_INTERVAL_MS = 2000; // emit every 2 seconds
 const SPEED_FACTOR = 3; // skip coordinates to simulate faster movement
+// BUG-011 fix: --mock flag auto-creates a demo incident if none exists
+const USE_MOCK = process.argv.includes('--mock');
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -127,9 +129,41 @@ async function main() {
     .single();
 
   if (error || !incident) {
-    console.error('❌ No active incident with route found:', error?.message || 'No data');
-    console.log('💡 Tip: Create an incident first via POST /api/emergency/intake');
-    process.exit(1);
+    if (USE_MOCK) {
+      console.log('⚡ No active incident found — creating a mock one (--mock flag active)...');
+      const { data: amb } = await supabase.from('ambulances').select('id').limit(1).single();
+      if (!amb) {
+        console.error('❌ No ambulances in DB either. Run: bun run seed.js first.');
+        process.exit(1);
+      }
+      const mockRoute = {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: { type: "LineString",
+          coordinates: [[72.8295, 19.0596],[72.8350, 19.0500],[72.8400, 19.0400],[72.8450, 19.0300],[72.8150, 19.0100]]
+        }, properties: { summary: { duration: 600 } } }]
+      };
+      const { data: newInc, error: incErr } = await supabase.from('incidents').insert({
+        emergency_text: 'MOCK: Cardiac arrest at Bandra Station',
+        severity: 'CRITICAL', ambulance_type: 'ALS', status: 'active',
+        patient_location: 'POINT(72.8295 19.0596)',
+        assigned_ambulance_id: amb.id, route_geojson: mockRoute, eta_minutes: 10,
+        patient_summary: '54yo male, cardiac arrest, requires ALS.',
+        triage_reasoning: 'CRITICAL: unresponsive with suspected cardiac etiology.'
+      }).select().single();
+      if (incErr || !newInc) { console.error('❌ Failed to create mock incident:', incErr?.message); process.exit(1); }
+      console.log('✅ Mock incident created:', newInc.id);
+      // Reassign to the newly created incident for simulation
+      Object.assign(incident || {}, newInc);
+      // Re-fetch after creation
+      const { data: freshInc } = await supabase.from('incidents')
+        .select('id, assigned_ambulance_id, route_geojson, status')
+        .eq('id', newInc.id).single();
+      if (freshInc) Object.assign(incident || {}, freshInc);
+    } else {
+      console.error('❌ No active incident with route found:', error?.message || 'No data');
+      console.log('💡 Tip: Run with --mock flag or create an incident via POST /api/emergency/intake');
+      process.exit(1);
+    }
   }
 
   console.log(`📋 Found incident: ${incident.id}`);

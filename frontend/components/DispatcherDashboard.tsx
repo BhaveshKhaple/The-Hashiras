@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { socket } from '@/lib/socket';
-import { Activity, Map as MapIcon, Siren, Hospital, Clock, Navigation } from 'lucide-react';
+import { Activity, Map as MapIcon, Siren, Clock, Navigation } from 'lucide-react';
 
 const MapComponent = dynamic(() => import('./MapComponent'), { 
   ssr: false,
@@ -16,10 +16,20 @@ export default function DispatcherDashboard() {
   const [hospitals, setHospitals] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [stats, setStats] = useState({ active: 0, critical: 0, ambulances: 0 });
+  const [currentTime, setCurrentTime] = useState('');
+
+  // Client-only clock to avoid hydration mismatch
+  useEffect(() => {
+    setCurrentTime(new Date().toLocaleTimeString());
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     fetchInitialData();
-    setupSubscriptions();
+    const cleanupSubs = setupSubscriptions();
     
     socket.connect();
     socket.on('ambulance:location', (data) => {
@@ -30,75 +40,98 @@ export default function DispatcherDashboard() {
       ));
     });
 
+    // BUG-005 fix: use the dispatch payload to immediately update ambulance status in local state
     socket.on('dispatch:ambulance', (data) => {
-        // Refresh incidents when a new dispatch occurs
-        fetchIncidents();
+      if (data?.ambulance?.id) {
+        setAmbulances(prev => prev.map(amb =>
+          amb.id === data.ambulance.id
+            ? { ...amb, status: 'dispatched' }
+            : amb
+        ));
+      }
+      fetchIncidents();
     });
 
     return () => {
       socket.disconnect();
+      // BUG-006 fix: call the returned cleanup so Supabase channel is removed on unmount
+      if (cleanupSubs) cleanupSubs();
     };
   }, []);
 
   const fetchInitialData = async () => {
-    // Hospitals
-    const { data: hosp } = await supabase.from('hospitals').select('*');
-    // PostGIS geo to lng/lat
-    // Note: We'll use a simpler query for MVP, but ideally use RPC or postgis operators
-    const formattedHosp = (hosp || []).map(h => ({
-        ...h,
-        // Mocking for now if geo parsing is complex, or ideally we fetch via RPC
-        lat: 19.07 + Math.random() * 0.05,
-        lng: 72.87 + Math.random() * 0.05
-    }));
-    setHospitals(formattedHosp);
+    try {
+      const { data: hosp } = await supabase.from('hospitals').select('*');
+      // BUG-004 fix: use real coords from DB if available; only fall back to demo area when null
+      const formattedHosp = (hosp || []).map(h => ({
+          ...h,
+          // Supabase PostGIS geography returns as string; we store lat/lng via seed as numeric fallback
+          lat: h.lat ?? (19.07 + Math.random() * 0.05),
+          lng: h.lng ?? (72.87 + Math.random() * 0.05)
+      }));
+      setHospitals(formattedHosp);
 
-    // Ambulances
-    const { data: amb } = await supabase.from('ambulances').select('*');
-    const formattedAmb = (amb || []).map(a => ({
-        ...a,
-        lat: 19.07 + Math.random() * 0.05,
-        lng: 72.87 + Math.random() * 0.05
-    }));
-    setAmbulances(formattedAmb);
+      const { data: amb } = await supabase.from('ambulances').select('*');
+      const formattedAmb = (amb || []).map(a => ({
+          ...a,
+          // BUG-004 fix: use real coords when available
+          lat: a.lat ?? (19.07 + Math.random() * 0.05),
+          lng: a.lng ?? (72.87 + Math.random() * 0.05)
+      }));
+      setAmbulances(formattedAmb);
+    } catch (err) {
+      console.warn('Supabase not configured, running in demo mode:', err);
+    }
 
     fetchIncidents();
   };
 
   const fetchIncidents = async () => {
-    const { data: inc } = await supabase.from('incidents')
-        .select('*')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
-    
-    const formattedInc = (inc || []).map(i => ({
-        ...i,
-        lat: 19.05 + Math.random() * 0.05,
-        lng: 72.82 + Math.random() * 0.05
-    }));
-    setIncidents(formattedInc);
-    
-    setStats({
-        active: inc?.length || 0,
-        critical: inc?.filter(i => i.severity === 'CRITICAL').length || 0,
-        ambulances: ambulances.filter(a => a.status === 'available').length
-    });
+    try {
+      const { data: inc } = await supabase.from('incidents')
+          .select('*')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false });
+      
+      // BUG-007 fix: use real patient coords from DB; only randomize as demo fallback
+      const formattedInc = (inc || []).map(i => ({
+          ...i,
+          lat: i.lat ?? (19.05 + Math.random() * 0.05),
+          lng: i.lng ?? (72.82 + Math.random() * 0.05)
+      }));
+      setIncidents(formattedInc);
+      
+      setStats({
+          active: inc?.length || 0,
+          critical: inc?.filter(i => i.severity === 'CRITICAL').length || 0,
+          ambulances: ambulances.filter(a => a.status === 'available').length
+      });
+    } catch (err) {
+      console.warn('Failed to fetch incidents:', err);
+    }
   };
 
   const setupSubscriptions = () => {
-    const channel = supabase
-      .channel('db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, payload => {
-        fetchIncidents();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ambulances' }, payload => {
-        // Handle ambulance status changes
-      })
-      .subscribe();
+    try {
+      const channel = supabase
+        .channel('db-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, () => {
+          fetchIncidents();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ambulances' }, () => {
+          // Refresh ambulance list on any status change
+          fetchInitialData();
+        })
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      // BUG-006 fix: return the cleanup function so the caller can remove the channel on unmount
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn('Supabase subscriptions not available:', err);
+      return undefined;
+    }
   };
 
   return (
@@ -150,12 +183,15 @@ export default function DispatcherDashboard() {
                   {incident.emergency_text}
                 </h3>
                 <p className="text-[11px] text-gray-500 mt-2 line-clamp-2 italic">
-                  "{incident.patient_summary}"
+                  &quot;{incident.patient_summary}&quot;
                 </p>
                 <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Navigation className="w-3 h-3 text-red-500" />
-                    <span className="text-[10px] font-mono text-gray-400">AMB-001</span>
+                    {/* BUG-010 fix: dynamic ambulance name lookup instead of hardcoded AMB-001 */}
+                    <span className="text-[10px] font-mono text-gray-400">
+                      {ambulances.find(a => a.id === incident.assigned_ambulance_id)?.name || 'AMB-???'}
+                    </span>
                   </div>
                   <button className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors">
                     Details
@@ -169,7 +205,7 @@ export default function DispatcherDashboard() {
         <div className="p-4 border-t border-white/10 bg-white/5">
             <div className="flex items-center gap-2 text-[11px] text-gray-400">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                System Healthy • {new Date().toLocaleTimeString()}
+                System Healthy {currentTime && `• ${currentTime}`}
             </div>
         </div>
       </div>

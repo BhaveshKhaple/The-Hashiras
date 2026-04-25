@@ -198,8 +198,19 @@ app.post('/api/emergency/intake', async (c) => {
         ];
         routeData = await calculateRoute(coords);
         
-        if (routeData.features && routeData.features.length > 0) {
-          const durationSeconds = routeData.features[0].properties.summary.duration;
+        // BUG-013 fix: ORS returns duration in multiple possible locations depending on API version/format
+        let durationSeconds = 0;
+        if (routeData?.features?.[0]?.properties?.segments?.[0]?.duration) {
+          // GeoJSON FeatureCollection with segments array (ORS v2 standard)
+          durationSeconds = routeData.features[0].properties.segments[0].duration;
+        } else if (routeData?.features?.[0]?.properties?.summary?.duration) {
+          // GeoJSON FeatureCollection with summary object (some ORS versions)
+          durationSeconds = routeData.features[0].properties.summary.duration;
+        } else if (routeData?.routes?.[0]?.summary?.duration) {
+          // JSON format response
+          durationSeconds = routeData.routes[0].summary.duration;
+        }
+        if (durationSeconds > 0) {
           etaMinutes = Math.ceil(durationSeconds / 60);
         }
       } catch (e) {

@@ -15,6 +15,7 @@ export function SOSApp() {
   const [transcript, setTranscript] = useState("");
   const [micSupported, setMicSupported] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [etaMinutes, setEtaMinutes] = useState<number>(8);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -80,10 +81,17 @@ export function SOSApp() {
       const res = await fetch(`${BACKEND_URL}/api/emergency/intake`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: emergencyText, lat: location.lat, lng: location.lng }),
+        // BUG-001 fix: backend reads emergency_text, not text
+        body: JSON.stringify({ emergency_text: emergencyText, lat: location.lat, lng: location.lng }),
       });
 
-      if (!res.ok) {
+      if (res.ok) {
+        const data = await res.json();
+        // BUG-002 fix: use real eta_minutes from backend response
+        if (data?.incident?.eta_minutes && data.incident.eta_minutes > 0) {
+          setEtaMinutes(data.incident.eta_minutes);
+        }
+      } else {
         console.warn("Backend returned non-200, but transitioning to DISPATCHED per demo resilience");
       }
     } catch (err) {
@@ -208,7 +216,7 @@ export function SOSApp() {
             </motion.div>
           ) : appState === "DISPATCHED" ? (
             <motion.div key="dispatched" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <DispatchedState etaMinutes={4} />
+              <DispatchedState etaMinutes={etaMinutes} />
             </motion.div>
           ) : (
             <motion.div key="sos" className="flex flex-col items-center gap-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

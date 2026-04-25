@@ -38,20 +38,26 @@ async function createMockIncident() {
   };
 
   const { data: incident, error } = await supabase.from('incidents').insert({
-    emergency_text: "MOCK EMERGENCY FOR TESTING",
-    severity: "HIGH",
+    emergency_text: "MOCK EMERGENCY: Cardiac arrest at Bandra Station",
+    severity: "CRITICAL",
     ambulance_type: "ALS",
     status: "active",
     patient_location: "POINT(72.8295 19.0596)",
     assigned_ambulance_id: amb.id,
     route_geojson: mockRoute,
-    eta_minutes: 10
+    eta_minutes: 10,
+    // BUG-003 fix: include patient_summary and triage_reasoning so dashboard cards render correctly
+    patient_summary: "54-year-old male, unresponsive, suspected cardiac arrest. Requires ALS with defibrillator.",
+    triage_reasoning: "CRITICAL classification: loss of consciousness with suspected cardiac etiology.",
+    suspected_conditions: ["cardiac arrest", "MI"],
+    hospital_requirements: ["ICU", "cardiac"]
   }).select().single();
 
   if (error) {
     console.error('Error creating mock incident:', error);
   } else {
     console.log('✅ Mock incident created:', incident.id);
+    return incident;
   }
 }
 
